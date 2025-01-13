@@ -1,0 +1,283 @@
+#!/usr/bin/env python
+# coding: utf-8
+
+# In[1]:
+
+
+#cần pip install gspread, pygsheet, datetime, OleFileIO_PL, gspread_formatting,unidecode
+
+
+# In[19]:
+
+
+import OleFileIO_PL
+import pandas as pd
+from glob import glob
+import datetime as dt
+from datetime import date
+from datetime import datetime, timedelta
+import pygsheets
+import gspread
+import requests
+import gspread_formatting as gsf
+from unidecode import unidecode
+import re
+
+
+# # Lựa chọn tháng cần Input
+
+# In[2]:
+
+
+## enter month in string type. E.g: "08" for August, "12" for December
+month = 11
+## enter year in string type.
+year = 2023
+
+get_month1= dt.date(year,month,1).strftime('%b %Y')
+get_month = str(get_month1)
+get_month
+
+
+# In[3]:
+
+
+if month == 1: 
+    last_month = dt.date(year - 1,12,1).strftime('%b %Y')
+else:
+    last_month = dt.date(year,month-1,1).strftime('%b %Y')
+last_month
+
+
+# In[4]:
+
+
+#index cho cột "Technical ET được tính value"
+special_index = (year - 2022)*12 + (month + 1)
+special_index
+
+
+# # Liệt kê danh sách các Dev/ Tester
+
+# ### Chú ý không viết hoa tên dev/tester
+
+# In[22]:
+
+
+ace_il_member = [
+....
+]
+
+
+# In[23]:
+
+
+infj_is_member = [
+....
+]
+
+
+# In[24]:
+
+
+list_member_name = ace_il_member + infj_is_member
+len(list_member_name)
+
+
+# In[25]:
+
+
+list_member_name
+
+
+# # Input Data tổng hợp từ sheet Tổng PMS Logged của cả công ty
+
+# In[26]:
+
+
+client = pygsheets.authorize(service_account_file="xxxxxxxxxx.json")
+sh=client.open("PMS Log Time - Company's All Members")
+wks = sh.worksheet_by_title('Data') # open the existing file 
+cells = wks.get_all_values(include_tailing_empty_rows=False, include_tailing_empty=False, returnas='matrix')
+df = pd.DataFrame(cells)
+df.columns = df.iloc[0]
+df = df[1:]
+
+
+df = df[df["Member_ID"].isin(list_member_name)]
+df = df[df.Month == get_month]
+df
+
+
+# In[27]:
+
+
+df['Logged Time'] = df['Logged Time'].astype(float)
+df['Technical ET'] = df['Technical ET'].astype(float)
+df['Member_ID'] = df['Member_ID'].astype(str)
+
+dev_client = pygsheets.authorize(service_account_file="xxxxxxxxxxxx.json")
+gc = gspread.service_account(filename='xxxxxxxxxxxxx.json')
+
+# this is the month to input to the yellow row of each file
+input_month = dt.date(year,month,1).strftime('%b %Y')
+
+
+# In[14]:
+
+
+df_ace_il = df[df["Member_ID"].isin(ace_il_member)]
+df5 = df_ace_il.groupby(["Member_ID",'Member','Mã Task','Tên Task','Status',"Month","Type",'Log Type'])['Logged Time'].sum().round(3)
+df5 = df5.reset_index()
+
+dev_sh=dev_client.open("BS KPI Summary - IL & ACE")
+dev_wks = dev_sh.worksheet_by_title('All Dev Value')
+dev_cells = dev_wks.get_all_values(include_tailing_empty_rows=False, include_tailing_empty=False, returnas='matrix')
+dev_last_row = len(dev_cells)
+dev_wks.set_dataframe(df5,(dev_last_row+1,1),copy_head = False, extend = True)
+
+
+# In[15]:
+
+
+df_infj_is = df[df["Member_ID"].isin(infj_is_member)]
+df5 = df_infj_is.groupby(["Member_ID",'Member','Mã Task','Tên Task','Status',"Month","Type",'Log Type'])['Logged Time'].sum().round(3)
+df5 = df5.reset_index()
+
+dev_sh=dev_client.open("BS KPI Summary - INFJ & IS")
+dev_wks = dev_sh.worksheet_by_title('All Dev Value')
+dev_cells = dev_wks.get_all_values(include_tailing_empty_rows=False, include_tailing_empty=False, returnas='matrix')
+dev_last_row = len(dev_cells)
+dev_wks.set_dataframe(df5,(dev_last_row+1,1),copy_head = False, extend = True)
+
+
+# # Lọc và Input vào từng file DEV/tester
+
+# In[71]:
+
+
+for mem_id in list_member_name:
+    arrayA = []
+    arrayJ = []
+    arrayK = []
+    arrayL = []
+    arrayM = []
+    arrayN = []
+    arrayO = []
+    arrayR = []
+    arrayI = []
+    try:
+    #Tạo các cột và function cho chuẩn format của file Dev
+        df2 = df.groupby(['Member',"Member_ID",'Mã Task',"Month",'Tên Task','Type','Status','Log Type', 'Technical ET', 'Complexity'])['Logged Time'].sum().round(3)
+        df2 = df2.reset_index()
+        df2 = df2[df2.Member_ID == "{}".format(mem_id)]
+        df2.drop(['Member','Member_ID'], axis=1, inplace=True)
+        
+    #Thêm số dòng để add các Row trong tháng của DEV
+        dev_sh=dev_client.open("BS Dev KPI - {}".format(mem_id))
+        dev_wks = dev_sh.worksheet_by_title('Task Value')
+        dev_cells = dev_wks.get_all_values(include_tailing_empty_rows=False, include_tailing_empty=False, returnas='matrix')
+        dev_last_row = len(dev_cells)
+        new_last_row = len(df2.index) + len(dev_cells) + 2        
+        
+    #Fill Down formulas cho các files, mỗi tháng sửa số 14 ở column K: 
+        for i in range(dev_last_row + 2,new_last_row):
+            columnA = '=concatenate("https://pms.bssgroup.vn/default/viewtaskdetail/",B{})'.format(i)
+            columnJ = '=if(D{b} = "Bug","",if(N{b}=0,"",IF(and(G{b}=0,F{b}="Làm task"), "Update ET!!!", if(and(G{b}<>0,F{b}="Làm task",G{b}-K{b}>0,Row(B{b})=MATCH(B{b}&F{b}&1,arrayformula(B:B&F:F&N:N),0)),G{b}-K{b}, if(and(G{b}<>0,F{b}="Làm task",G{b}-K{b}<=0,Row(B{b})=MATCH(B{b}&F{b}&1,arrayformula(B:B&F:F&N:N),0)),0, if(and(G{b}<>0,F{b}="Làm task",G{b}-K{b}>0,Row(B{b})>MATCH(B{b}&F{b}&1,arrayformula(B:B&F:F&N:N),0),index(G:G,Row(B{b}),1)=index(G:G,MATCH(B{b}&F{b}&1,arrayformula(B:B&F:F&N:N),0),1)),-L{b}, if(and(G{b}<>0,F{b}="Làm task",G{b}-K{b}<=0,Row(B{b})>MATCH(B{b}&F{b}&1,arrayformula(B:B&F:F&N:N),0),index(G:G,Row(B{b}),1)=index(G:G,MATCH(B{b}&F{b}&1,arrayformula(B:B&F:F&N:N),0),1),-L{b}+K{b}-G{b}<0),-L{b}+K{b}-G{b}, if(and(G{b}<>0,F{b}="Làm task",Row(B{b})>MATCH(B{b}&F{b}&1,arrayformula(B:B&F:F&N:N),0),index(G:G,Row(B{b}),1)>index(G:G,MATCH(B{b}&F{b}&1,arrayformula(B:B&F:F&N:N),0),1)), G{b}-index(G:G,XMATCH(INDEX(B:B&F:F&N:N&G:G,LARGE(IF($B$1:$B${f}=B{b},if(F:F = "Làm task",if(N:N = 1,Row(B:B)))),2)),arrayformula(B:B&F:F&N:N&G:G),1,-1),1)-L{b},""))))))))'.format(b=i,f=new_last_row-1)
+            columnK = '=iferror(if(isblank(vlookup(B{c},importrange("1uJoTmsHxX_C3e6a_1NG1scSN_Bzz-6NJof5RV8lqzcE","Log Type = Support!A:BA"),{a},false)),XLOOKUP(B{c},$B$1:$B${b},$K$1:$K${b},,,-1),vlookup(B{c},importrange("1uJoTmsHxX_C3e6a_1NG1scSN_Bzz-6NJof5RV8lqzcE","Log Type = Support!A:BA"),{a},false)))'.format(c=i,a=special_index,b=dev_last_row)
+            columnL = '=iferror(arrayformula(VLOOKUP(B{h}&$A${k},{l},2,false)))'.format(h=i,k=dev_last_row+1,l=str('{importrange("1uJoTmsHxX_C3e6a_1NG1scSN_Bzz-6NJof5RV8lqzcE","Raw Type Support!A:A")&importrange("1uJoTmsHxX_C3e6a_1NG1scSN_Bzz-6NJof5RV8lqzcE","Raw Type Support!B:B"),importrange("1uJoTmsHxX_C3e6a_1NG1scSN_Bzz-6NJof5RV8lqzcE","Raw Type Support!C:C")}'))
+            columnM = '=if(or(D{d}="Feature", D{d}="ET"),VLOOKUP(E{d},importrange("1YEYyBxhyZ4z6TOmLuBWsA0FfRMB-PzQ82WoJyyb6Pfw","StatusType!A:C"),2,0),VLOOKUP(E{d},importrange("1YEYyBxhyZ4z6TOmLuBWsA0FfRMB-PzQ82WoJyyb6Pfw","StatusType!A:C"),3,0))'.format(d=i)
+            columnN = '=VLOOKUP(D{},importrange("1YEYyBxhyZ4z6TOmLuBWsA0FfRMB-PzQ82WoJyyb6Pfw","1. Task Type!B:C"),2,0)'.format(i)
+            columnO = '=VLOOKUP(F{},importrange("1YEYyBxhyZ4z6TOmLuBWsA0FfRMB-PzQ82WoJyyb6Pfw","1.1. Log Type!A:B"),2,0)'.format(i)
+            columnR = '=iferror(if(F{c}="Làm task",P{c}*O{c}*Q{c}*J{c}*N{c},O{c}*Q{c}*P{c}*H{c}))'.format(c=i)
+            columnI = '=HLOOKUP("{}",importrange("1uJoTmsHxX_C3e6a_1NG1scSN_Bzz-6NJof5RV8lqzcE","TaskTotal!B2:20000"),match(B{},importrange("1uJoTmsHxX_C3e6a_1NG1scSN_Bzz-6NJof5RV8lqzcE","TaskTotal!A:A"),0)-1,false)'.format(mem_id,i)
+            
+            arrayA.append(columnA)
+            arrayJ.append(columnJ)
+            arrayK.append(columnK)
+            arrayL.append(columnL)
+            arrayM.append(columnM)
+            arrayN.append(columnN)
+            arrayO.append(columnO)
+            arrayI.append(columnI)
+            arrayR.append(columnR)
+            
+       
+        df2["Link Task"] = arrayA 
+        df2["Technical ET được tính value"] = arrayJ
+        df2["Accumulated Log Support"] = arrayK 
+        df2["Monthly Log Support"] = arrayL
+        df2["Status Value"] = arrayM 
+        df2["Task Type Value"] = arrayN 
+        df2["Log Type Value"] = arrayO 
+        df2["Value"] = arrayR
+        df2["Total Logged Time (acc.)"] = arrayI
+        df2["Reward"] = ""
+        
+        df2 = df2[["Link Task","Mã Task","Tên Task","Type","Status","Log Type"
+                   ,"Technical ET","Logged Time","Total Logged Time (acc.)","Technical ET được tính value"
+                   ,"Accumulated Log Support","Monthly Log Support","Month", "Status Value","Task Type Value","Log Type Value","Complexity","Reward","Value"]]
+        
+    #Input Data
+        row_to_input = dev_last_row + 2
+        dev_wks.set_dataframe(df2,(row_to_input,1),copy_head = False, extend = True)
+        
+    # ADDING the Month Row and update the sum of the column Task Value  
+        last_month_cells = dev_wks.find(last_month)
+        last_month_cells = [ x for x in last_month_cells if """<Cell A""" in str(x) ]
+        last_month_row = last_month_cells[0].row
+        dev_wks.update_value('S{}'.format(str(dev_last_row+1)),'=sum(S{}:S{}) + R{}'.format(str(dev_last_row+2),str(new_last_row-1),str(dev_last_row+1)),True)
+        dev_wks.update_value('D{}'.format(str(dev_last_row+1)), input_month,True)
+        
+    #Update lại total value cho tháng trước
+        dev_wks.update_value('S{}'.format(str(last_month_row)),'=sum(S{}:S{}) + R{}'.format(str(last_month_row+1),str(dev_last_row),str(last_month_row)),True)
+        
+    #Update Review Code cho Dev
+        dev_wks.update_value('T{}'.format(str(dev_last_row+1)),
+                             """=if(HLOOKUP("{p}",importrange("1A_7ttBvwCbzONAvGJwBkdvdeRxfUQjcJx95t-apEtwU","Quarterly BS Dev - Review!B1:1000"),
+                                          match(year(A{r}) & "-Q" &INT((MONTH(A{r})+2)/3),importrange("1A_7ttBvwCbzONAvGJwBkdvdeRxfUQjcJx95t-apEtwU","Quarterly BS Dev - Review!A:A"),0),false)="",5,
+                                 HLOOKUP("{p}",importrange("1A_7ttBvwCbzONAvGJwBkdvdeRxfUQjcJx95t-apEtwU","Quarterly BS Dev - Review!B1:1000"),
+                                         match(year(A{r}) & "-Q" &INT((MONTH(A{r})+2)/3),importrange("1A_7ttBvwCbzONAvGJwBkdvdeRxfUQjcJx95t-apEtwU","Quarterly BS Dev - Review!A:A"),0),false))""".format(p = mem_id, r=str(dev_last_row+1)),True)
+    
+    # Change the format of rows that contain Month
+        spreadsheetId_x = dev_sh.id
+        sh_x = gc.open_by_key(spreadsheetId_x)
+        worksheet = sh_x.worksheet('Task Value')
+        
+    #format màu vàng
+        fmt = gsf.cellFormat(
+            backgroundColor=gsf.color(1, 1, 0),
+            textFormat=gsf.textFormat(
+                bold=True, foregroundColor=gsf.color(0,0,0), fontSize=10)
+        )
+        gsf.format_cell_range(worksheet, 'B{t}:U{t}'.format(t=str(dev_last_row+1)), fmt)
+        
+    # format màu xanh cho reward và Review Code    
+        fmt2 = gsf.cellFormat(
+            backgroundColor=gsf.color(0.8, 0.8, 1),
+            textFormat=gsf.textFormat(
+                bold=True, foregroundColor=gsf.color(0,0,0), fontSize=10)
+        )
+        gsf.format_cell_range(worksheet, 'R{t}'.format(t=str(dev_last_row+1)), fmt2)   
+        gsf.format_cell_range(worksheet, 'T{t}'.format(t=str(dev_last_row+1)), fmt2)   
+    
+    #format lại BG cho cột L -> S
+        fmt3 = gsf.cellFormat(
+            backgroundColor=gsf.color(1, 1, 1),
+            textFormat=gsf.textFormat(
+                bold=False, foregroundColor=gsf.color(0,0,0), fontSize=10)
+        )
+        gsf.format_cell_range(worksheet, 'L{}:S{}'.format(str(dev_last_row+2),str(new_last_row-1)), fmt3)   
+     
+    # Merge cells   
+        dev_wks.merge_cells(start= 'A{}'.format(str(dev_last_row+1)), end='L{}'.format(str(dev_last_row+1)), merge_type='MERGE_ALL', grange=None)
+        
+    except:
+        print("'{}' can't be input".format(mem_id))
+
+
+# In[ ]:
+
+
+
+
