@@ -1,9 +1,3 @@
-#!/usr/bin/env python
-# coding: utf-8
-
-# In[5]:
-
-
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 import time
@@ -28,10 +22,6 @@ import gspread
 import pygsheets
 import numpy as np
 
-
-# In[6]:
-
-
 chrome_options = Options()
 chrome_options.add_argument("--remote-debugging-port=9222")
 chrome_options.add_argument('user-data-dir=C:\\selenium\\ChromeProfile')
@@ -39,8 +29,6 @@ chrome_driver = "C:\\Users\\BSS\\BSS\\chromedriver"
 driver = webdriver.Chrome(service = Service(ChromeDriverManager().install()), options=chrome_options)
 driver.maximize_window()
 
-
-# In[7]:
 
 
 client = pygsheets.authorize(service_account_file="xxxxxxxxxxxx.json")
@@ -59,9 +47,6 @@ all_competitor_link = [i for i in all_competitor_link if i is not None]
 len(all_competitor_link)
 
 
-# In[8]:
-
-
 review_sh = client.open("Competitor's Reviews")
 competitor_list_wks = review_sh.worksheet_by_title("Competitors List") # open the existing file
 competitor_list_cells = competitor_list_wks.get_all_values(include_tailing_empty_rows=False, include_tailing_empty=False, returnas='matrix')
@@ -75,15 +60,7 @@ df_get_link2 = df_get_link2[1:]
 old_competitor_link = df_get_link2['App Link'].values.tolist()
 len(old_competitor_link)
 
-
-# In[24]:
-
-
 reviews_list = []
-
-
-# In[10]:
-
 
 #page_of_review: là page chứa các review (để check có bao nhiêu reviews trong page đó)
 for link in old_competitor_link[75:]:
@@ -139,14 +116,7 @@ for link in old_competitor_link[75:]:
         if count > 25:
             break
 
-
-# In[11]:
-
-
 new_competitor_list = [x for x in all_competitor_link if x not in old_competitor_link]
-
-
-# In[25]:
 
 
 #page_of_review: là page chứa các review (để check có bao nhiêu reviews trong page đó)
@@ -204,15 +174,7 @@ for link in new_competitor_list:
         count += 1
 
 
-# In[26]:
-
-
 df = pd.DataFrame(reviews_list)
-df
-
-
-# In[27]:
-
 
 def days_spent(time):
     days_spent =  [int(s) for s in time.split() if s.isdigit()][0]
@@ -226,8 +188,6 @@ def days_spent(time):
             
     return days_spent_clean
 
-
-# In[28]:
 
 
 df["Time spent on App (day)"] = df["Time spent on App (day)"].astype(str).apply(days_spent)
@@ -246,8 +206,6 @@ df["Review date"] = df["Review date"].dt.strftime('%m/%d/%Y')
 df
 
 
-# In[29]:
-
 
 review_sh = client.open("Competitor's Reviews")
 review_wks = review_sh.worksheet_by_title("Competitor's Reviews Data") # open the existing file
@@ -262,16 +220,10 @@ check_duplicates.drop(["BSS App","Brand Name", "App Name", "Review Link", "Revie
 check_duplicates
 
 
-# In[30]:
-
-
 df = pd.merge(df, check_duplicates, on=["App Link","Review full content","Review date"], how="outer", indicator=True)
 df = df.loc[df["_merge"] == "left_only"].drop(["_merge"], axis=1)
 df.drop_duplicates(inplace=True)
 df
-
-
-# In[31]:
 
 
 review_sh = client.open("Competitor's Reviews")
@@ -279,14 +231,6 @@ review_wks = review_sh.worksheet_by_title("Competitor's Reviews Data") # open th
 review_cells = review_wks.get_all_values(include_tailing_empty_rows=False, include_tailing_empty=False, returnas='matrix')
 review_wks.set_dataframe(df,(len(review_cells)+1,2),copy_head = False ,extend = True)
 
-
-# In[ ]:
-
-
-
-
-
-# In[ ]:
 
 
 
