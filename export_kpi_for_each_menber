@@ -1,15 +1,3 @@
-#!/usr/bin/env python
-# coding: utf-8
-
-# In[1]:
-
-
-#cần pip install gspread, pygsheet, datetime, OleFileIO_PL, gspread_formatting,unidecode
-
-
-# In[19]:
-
-
 import OleFileIO_PL
 import pandas as pd
 from glob import glob
@@ -24,10 +12,6 @@ from unidecode import unidecode
 import re
 
 
-# # Lựa chọn tháng cần Input
-
-# In[2]:
-
 
 ## enter month in string type. E.g: "08" for August, "12" for December
 month = 11
@@ -39,8 +23,6 @@ get_month = str(get_month1)
 get_month
 
 
-# In[3]:
-
 
 if month == 1: 
     last_month = dt.date(year - 1,12,1).strftime('%b %Y')
@@ -49,7 +31,6 @@ else:
 last_month
 
 
-# In[4]:
 
 
 #index cho cột "Technical ET được tính value"
@@ -61,38 +42,17 @@ special_index
 
 # ### Chú ý không viết hoa tên dev/tester
 
-# In[22]:
+
+ace_il_member = [....]
 
 
-ace_il_member = [
-....
-]
-
-
-# In[23]:
-
-
-infj_is_member = [
-....
-]
-
-
-# In[24]:
+infj_is_member = [....]
 
 
 list_member_name = ace_il_member + infj_is_member
-len(list_member_name)
-
-
-# In[25]:
-
-
-list_member_name
 
 
 # # Input Data tổng hợp từ sheet Tổng PMS Logged của cả công ty
-
-# In[26]:
 
 
 client = pygsheets.authorize(service_account_file="xxxxxxxxxx.json")
@@ -109,9 +69,6 @@ df = df[df.Month == get_month]
 df
 
 
-# In[27]:
-
-
 df['Logged Time'] = df['Logged Time'].astype(float)
 df['Technical ET'] = df['Technical ET'].astype(float)
 df['Member_ID'] = df['Member_ID'].astype(str)
@@ -123,9 +80,6 @@ gc = gspread.service_account(filename='xxxxxxxxxxxxx.json')
 input_month = dt.date(year,month,1).strftime('%b %Y')
 
 
-# In[14]:
-
-
 df_ace_il = df[df["Member_ID"].isin(ace_il_member)]
 df5 = df_ace_il.groupby(["Member_ID",'Member','Mã Task','Tên Task','Status',"Month","Type",'Log Type'])['Logged Time'].sum().round(3)
 df5 = df5.reset_index()
@@ -135,9 +89,6 @@ dev_wks = dev_sh.worksheet_by_title('All Dev Value')
 dev_cells = dev_wks.get_all_values(include_tailing_empty_rows=False, include_tailing_empty=False, returnas='matrix')
 dev_last_row = len(dev_cells)
 dev_wks.set_dataframe(df5,(dev_last_row+1,1),copy_head = False, extend = True)
-
-
-# In[15]:
 
 
 df_infj_is = df[df["Member_ID"].isin(infj_is_member)]
@@ -152,9 +103,6 @@ dev_wks.set_dataframe(df5,(dev_last_row+1,1),copy_head = False, extend = True)
 
 
 # # Lọc và Input vào từng file DEV/tester
-
-# In[71]:
-
 
 for mem_id in list_member_name:
     arrayA = []
@@ -275,8 +223,6 @@ for mem_id in list_member_name:
     except:
         print("'{}' can't be input".format(mem_id))
 
-
-# In[ ]:
 
 
 
