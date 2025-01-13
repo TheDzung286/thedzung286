@@ -1,0 +1,293 @@
+#!/usr/bin/env python
+# coding: utf-8
+
+# In[5]:
+
+
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
+import time
+import datetime as dt
+from selenium.webdriver.common.by import By
+import datetime
+from datetime import date
+from datetime import datetime, timedelta
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.common.exceptions import WebDriverException
+from selenium.webdriver.common.action_chains import ActionChains
+from selenium.webdriver.common.keys import Keys
+#Open Chrome
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.chrome.service import Service
+from webdriver_manager.chrome import ChromeDriverManager
+
+import pandas as pd
+import gspread
+import pygsheets
+import numpy as np
+
+
+# In[6]:
+
+
+chrome_options = Options()
+chrome_options.add_argument("--remote-debugging-port=9222")
+chrome_options.add_argument('user-data-dir=C:\\selenium\\ChromeProfile')
+chrome_driver = "C:\\Users\\BSS\\BSS\\chromedriver"
+driver = webdriver.Chrome(service = Service(ChromeDriverManager().install()), options=chrome_options)
+driver.maximize_window()
+
+
+# In[7]:
+
+
+client = pygsheets.authorize(service_account_file="xxxxxxxxxxxx.json")
+sh=client.open('Linh - Full Shopify App Market Research')
+wks = sh.worksheet_by_title('Competitor List') # open the existing file
+cells = wks.get_all_values(include_tailing_empty_rows=False, include_tailing_empty=False, returnas='matrix')
+df_get_link = pd.DataFrame(cells)
+
+#set first row as column
+df_get_link.columns = df_get_link.iloc[0]
+df_get_link = df_get_link[1:]
+
+#list of competitors' links
+all_competitor_link = df_get_link['Competitor Link'].values.tolist()
+all_competitor_link = [i for i in all_competitor_link if i is not None]
+len(all_competitor_link)
+
+
+# In[8]:
+
+
+review_sh = client.open("Competitor's Reviews")
+competitor_list_wks = review_sh.worksheet_by_title("Competitors List") # open the existing file
+competitor_list_cells = competitor_list_wks.get_all_values(include_tailing_empty_rows=False, include_tailing_empty=False, returnas='matrix')
+df_get_link2 = pd.DataFrame(competitor_list_cells)
+#set first row as column
+df_get_link2.columns = df_get_link2.iloc[0]
+df_get_link2 = df_get_link2[1:]
+
+
+#list of old competitors' links
+old_competitor_link = df_get_link2['App Link'].values.tolist()
+len(old_competitor_link)
+
+
+# In[24]:
+
+
+reviews_list = []
+
+
+# In[10]:
+
+
+#page_of_review: là page chứa các review (để check có bao nhiêu reviews trong page đó)
+for link in old_competitor_link[75:]:
+    driver.get(link)
+    try:
+        brand = driver.find_element(By.XPATH,'//*[@id="adp-hero"]/div/div/div[1]/div/div[1]/div[2]/div[2]/div[3]/div').text
+    except:
+        continue
+    time.sleep(2)
+    count = 1
+    while True:    
+        review_link = link + '/reviews?sort_by=newest&page={}'.format(str(count))
+        driver.get(review_link)
+        time.sleep(1)
+        page_of_review = []
+        for i in range(1,11):
+            try:
+                reviews = driver.find_element(By.XPATH,'//*[@id="adp-reviews"]/div/div[2]/div[3]/div[1]/div[{}]/div[1]'.format(i))
+                page_of_review.append(reviews)
+            except:
+                continue
+        if len(page_of_review) == 0:
+            break
+        try:                                    
+            app = driver.find_element(By.XPATH,'//*[@id="adp-reviews"]/div/div[1]/div[1]/h1/span[1]/a/span').text
+            for Review in page_of_review:
+                index = page_of_review.index(Review)
+                name = Review.find_element(By.XPATH,'//*[@id="adp-reviews"]/div/div[2]/div[3]/div[1]/div[{}]/div[1]/div[3]'.format(str(index+1))).text
+                location = Review.find_element(By.XPATH,'//*[@id="adp-reviews"]/div/div[2]/div[3]/div[1]/div[{}]/div[1]/div[4]/span'.format(str(index+1))).text
+                try:                                    
+                    time_spent= Review.find_element(By.XPATH,'//*[@id="adp-reviews"]/div/div[2]/div[3]/div[1]/div[{}]/div[1]/div[4]/div/span'.format(str(index+1))).text
+                except:
+                    time_spent = 'Time spent using app: 0 days'
+                review_full_content = Review.find_element(By.XPATH, '//*[@id="adp-reviews"]/div/div[2]/div[3]/div[1]/div[{}]/div[1]/div[2]/div'.format(str(index+1))).text
+                rating = Review.find_element(By.XPATH, '//*[@id="adp-reviews"]/div/div[2]/div[3]/div[1]/div[{}]/div[1]/div[1]/div[1]'.format(str(index+1))).get_attribute("aria-label")
+                review_date = Review.find_element(By.XPATH, '//*[@id="adp-reviews"]/div/div[2]/div[3]/div[1]/div[{}]/div[1]/div[1]/div[2]'.format(str(index+1))).text
+                Review_item = { 
+                            "Brand Name": brand,
+                            'App Name': app,
+                            'App Link': link,
+                            'Review Link': review_link,
+                            'Reviewer name': name,
+                            'Reviewer location': location,
+                            'Time spent on App (day)': time_spent,
+                            'Review full content': review_full_content,
+                            'Rating': rating,
+                            'Review date': review_date,
+                        }
+                reviews_list.append(Review_item)
+        except:
+            pass
+        count += 1
+        if count > 25:
+            break
+
+
+# In[11]:
+
+
+new_competitor_list = [x for x in all_competitor_link if x not in old_competitor_link]
+
+
+# In[25]:
+
+
+#page_of_review: là page chứa các review (để check có bao nhiêu reviews trong page đó)
+for link in new_competitor_list:
+    driver.get(link)
+    try:
+        brand = driver.find_element(By.XPATH,'//*[@id="adp-hero"]/div/div/div[1]/div/div[1]/div[2]/div[2]/div[3]/div/a').text
+    except:
+        continue
+    if len(brand) == 0:
+        break
+    time.sleep(2)
+    count = 1
+    while True:    
+        review_link = link + '/reviews?sort_by=newest&page={}'.format(str(count))
+        driver.get(review_link)
+        
+        page_of_review = []
+        for i in range(1,11):
+            try:
+                reviews = driver.find_element(By.XPATH,'//*[@id="adp-reviews"]/div/div[2]/div[3]/div[1]/div[{}]/div[1]'.format(i))
+                page_of_review.append(reviews)
+            except:
+                continue
+        if len(page_of_review) == 0:
+            break
+        try:                                 
+            app = driver.find_element(By.XPATH,'//*[@id="adp-reviews"]/div/div[1]/div[1]/h1/span[1]/a/span').text
+            for Review in page_of_review:
+                index = page_of_review.index(Review)
+                name = Review.find_element(By.XPATH,'//*[@id="adp-reviews"]/div/div[2]/div[3]/div[1]/div[{}]/div[1]/div[3]'.format(str(index+1))).text
+                location = Review.find_element(By.XPATH,'//*[@id="adp-reviews"]/div/div[2]/div[3]/div[1]/div[{}]/div[1]/div[4]/span'.format(str(index+1))).text
+                try:                                    
+                    time_spent= Review.find_element(By.XPATH,'//*[@id="adp-reviews"]/div/div[2]/div[3]/div[1]/div[{}]/div[1]/div[4]/div/span'.format(str(index+1))).text
+                except:
+                    time_spent = 'Time spent using app: 0 days'
+                review_full_content = Review.find_element(By.XPATH, '//*[@id="adp-reviews"]/div/div[2]/div[3]/div[1]/div[{}]/div[1]/div[2]/div'.format(str(index+1))).text
+                rating = Review.find_element(By.XPATH, '//*[@id="adp-reviews"]/div/div[2]/div[3]/div[1]/div[{}]/div[1]/div[1]/div[1]'.format(str(index+1))).get_attribute("aria-label")
+                review_date = Review.find_element(By.XPATH, '//*[@id="adp-reviews"]/div/div[2]/div[3]/div[1]/div[{}]/div[1]/div[1]/div[2]'.format(str(index+1))).text
+                Review_item = { 
+                            "Brand Name": brand,
+                            'App Name': app,
+                            'App Link': link,
+                            'Review Link': review_link,
+                            'Reviewer name': name,
+                            'Reviewer location': location,
+                            'Time spent on App (day)': time_spent,
+                            'Review full content': review_full_content,
+                            'Rating': rating,
+                            'Review date': review_date,
+                        }
+                reviews_list.append(Review_item)
+        except:
+            pass
+        count += 1
+
+
+# In[26]:
+
+
+df = pd.DataFrame(reviews_list)
+df
+
+
+# In[27]:
+
+
+def days_spent(time):
+    days_spent =  [int(s) for s in time.split() if s.isdigit()][0]
+    dict_time = {"minute": 1/(60*24), "hour": 1/24, "day": 1, "month": 30, "year": 365}
+    for unit in dict_time:
+        if unit in time:
+            days_spent_clean = days_spent*dict_time[unit]
+            if "Over" in time: days_spent_clean=days_spent*dict_time[unit]*1.01
+            if"About" in time: days_spent_clean=days_spent*dict_time[unit]*0.99
+            if"Almost" in time: days_spent_clean=days_spent*dict_time[unit]*0.99
+            
+    return days_spent_clean
+
+
+# In[28]:
+
+
+df["Time spent on App (day)"] = df["Time spent on App (day)"].astype(str).apply(days_spent)
+
+#Get Only Rate:
+df['Rating'] = df['Rating'].str.replace(r' out of 5 stars', '').astype(int)
+
+#Remove 'Edit'
+for x in df.index:
+    if "Edited" in df.loc[x, 'Review date']:
+        df.loc[x, 'Review date']=df.loc[x, 'Review date'].replace("Edited ","")
+df["Review Month"] = pd.to_datetime(df['Review date']).dt.to_period('M')
+df["Review Month"] = df["Review Month"].dt.strftime('%b %Y')
+df["Review date"] = pd.to_datetime(df["Review date"],format='%B %d, %Y') 
+df["Review date"] = df["Review date"].dt.strftime('%m/%d/%Y')
+df
+
+
+# In[29]:
+
+
+review_sh = client.open("Competitor's Reviews")
+review_wks = review_sh.worksheet_by_title("Competitor's Reviews Data") # open the existing file
+review_cells = review_wks.get_all_values(include_tailing_empty_rows=False, include_tailing_empty=False, returnas='matrix')
+check_duplicates = pd.DataFrame(review_cells)
+
+#set first row as column
+check_duplicates.columns = check_duplicates.iloc[0]
+check_duplicates = check_duplicates[1:]
+
+check_duplicates.drop(["BSS App","Brand Name", "App Name", "Review Link", "Reviewer name","Reviewer location","Time spent on App (day)","Rating","Review Month","Unique App Name"], axis=1, inplace=True)
+check_duplicates
+
+
+# In[30]:
+
+
+df = pd.merge(df, check_duplicates, on=["App Link","Review full content","Review date"], how="outer", indicator=True)
+df = df.loc[df["_merge"] == "left_only"].drop(["_merge"], axis=1)
+df.drop_duplicates(inplace=True)
+df
+
+
+# In[31]:
+
+
+review_sh = client.open("Competitor's Reviews")
+review_wks = review_sh.worksheet_by_title("Competitor's Reviews Data") # open the existing file
+review_cells = review_wks.get_all_values(include_tailing_empty_rows=False, include_tailing_empty=False, returnas='matrix')
+review_wks.set_dataframe(df,(len(review_cells)+1,2),copy_head = False ,extend = True)
+
+
+# In[ ]:
+
+
+
+
+
+# In[ ]:
+
+
+
+
